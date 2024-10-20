@@ -1,0 +1,293 @@
+import numpy as np
+from sklearn.ensemble import HistGradientBoostingClassifier
+#from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.inspection import permutation_importance
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import LabelEncoder # Import LabelEncoder for handling categorical features
+import seaborn as sns
+from IPython.display import clear_output
+
+# Load the pre-existing data
+data = np.genfromtxt('dataSet.csv', delimiter=',', skip_header=0, names=True, dtype=None, encoding=None)
+
+# Convert structured array to a regular 2D array
+data_2d = np.array([list(row) for row in data])
+
+
+
+# Split the data into features and target (after handling NaN)
+X = data_2d[:, :-1] # Now you can index as a 2D array
+y = data_2d[:, -1]
+
+# Get feature names (assuming they are in the first row of your data)
+feature_names = list(data.dtype.names[:-1]) #Convert feature_names to list, moved up here before it's used
+
+label_encoders = [] # Store a LabelEncoder for each feature
+X_encoded = np.empty(X.shape, dtype=int) # Initialize array to store encoded features
+for i, column in enumerate(X.T):
+    label_encoder = LabelEncoder()
+    X_encoded[:, i] = label_encoder.fit_transform(column)
+    label_encoders.append(label_encoder)
+
+X = X_encoded # Update X with the encoded feature
+
+# Print the mappings for each feature
+for i, label_encoder in enumerate(label_encoders):
+    print(f"Feature: {feature_names[i]}")
+    for original_value, encoded_value in zip(label_encoder.classes_, range(len(label_encoder.classes_))):
+        print(f"  '{original_value}' -> {encoded_value}")
+    print()
+
+# Get feature names (assuming they are in the first row of your data)
+feature_names = list(data.dtype.names[:-1]) #Convert feature_names to list
+
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15)
+
+# Initialize the Classifier
+clf = HistGradientBoostingClassifier()
+
+# Train the model on the training data
+clf.fit(X_train, y_train)
+
+
+#Uncomment only for multivariable comparisions
+"""
+#Permutation Importance and Lime chart
+
+#Permutation Importances
+
+#Permuation Importance shown using mat-plot-lib
+permutation_results = permutation_importance(clf, X_train, y_train)
+
+
+
+# Create a bar plot
+sorted_idx = permutation_results.importances_mean.argsort()
+plt.barh(np.array(feature_names)[sorted_idx], permutation_results.importances_mean[sorted_idx]) #Index the list feature_names after converting it to a NumPy array
+plt.xlabel("Permutation Importance")
+plt.title("Permutation Importances (train set)")
+plt.show()
+
+
+# Permutation Importance for test set
+permutation_results_test = permutation_importance(clf, X_test, y_test, n_repeats=10, random_state=42)
+
+# Create a bar plot for test set
+sorted_idx_test = permutation_results_test.importances_mean.argsort()
+plt.barh(np.array(feature_names)[sorted_idx_test], permutation_results_test.importances_mean[sorted_idx_test])
+plt.xlabel("Permutation Importance")
+plt.title("Permutation Importances (test set)")
+plt.show()
+
+#Lime Explanations attempt
+"""
+"""
+import lime
+import lime.lime_tabular
+
+# Create a LimeTabularExplainer object, enabling discretization
+explainer = lime.lime_tabular.LimeTabularExplainer(
+    X_train,  # Use the numerically encoded training data
+    feature_names=feature_names,
+    class_names=['Just $250', 'More Than $250'],
+    discretize_continuous=True  # Enable discretization for all features
+)
+
+for instance_idx in range(3):
+  # Explain the prediction for a specific instance
+  #instance_idx = 0
+  # Use the encoded test data (X_test) for explanation
+  explanation = explainer.explain_instance(X_test[instance_idx], clf.predict_proba, num_features=17, top_labels=1)
+
+  # Display the explanation with discretized values
+  explanation.show_in_notebook()
+  print(X_test[instance_idx])
+
+  # Assuming 'instance_idx' is the index of the instance you're interested in
+  instance = X_test[instance_idx]
+  confidence = clf.predict_proba([instance])[0]
+
+  print("Confidence: ", confidence)
+
+  #Print Actual Outcome
+  actual_outcome = y_test[instance_idx]
+  print("Actual Outcome of lime chart instance: " + actual_outcome)
+  print()
+  print()
+  print("-" * 30)  # Separator between explanations
+"""
+
+
+#Referred practice vs diagnosis
+"""
+# --- Heatmap for 'Referred practice' vs. 'diagnosis' ---
+
+# Create a cross-tabulation (contingency table)
+cross_tab = pd.crosstab(pd.Series(X[:, feature_names.index('Refered_Practice')]),
+                        pd.Series(X[:, feature_names.index('Diagnosis')]))
+
+plt.figure(figsize=(10, 6))
+sns.heatmap(cross_tab, annot=True, fmt="d", cmap="viridis")
+plt.xlabel('Diagnosis')
+plt.ylabel('Referred_Practice')
+plt.title('Heatmap of Referred Practice vs. Diagnosis')
+plt.show()
+
+
+# Create a cross-tabulation with outcome included
+cross_tab = pd.crosstab([pd.Series(X[:, feature_names.index('Refered_Practice')]),
+                        pd.Series(X[:, feature_names.index('Diagnosis')])],
+                       pd.Series(y))
+
+# Calculate conditional probabilities
+conditional_probs = cross_tab.div(cross_tab.sum(axis=1), axis=0)
+
+# Display the conditional probabilities
+#print(conditional_probs)
+
+# You can further visualize these probabilities using a heatmap:
+plt.figure(figsize=(16, 12))
+sns.heatmap(conditional_probs, annot=True, fmt=".2f", cmap="viridis")
+plt.xlabel('Outcome')
+plt.ylabel('Referred practice, diagnosis')
+plt.title('Conditional Probabilities of Outcome Given Referred practice and diagnosis')
+plt.show()
+"""
+
+
+
+
+#Age Heatmap
+"""
+# Create a cross-tabulation (contingency table)
+cross_tab = pd.crosstab(pd.Series(X[:, feature_names.index('Age')]),
+                        pd.Series(y))
+
+plt.figure(figsize=(10, 6))
+sns.heatmap(cross_tab, annot=True, fmt="d", cmap="viridis")
+plt.xlabel('Outcome')
+plt.ylabel('Age')
+plt.title('Heatmap of Age vs. Outcome')
+plt.show()
+
+#Conditional Probabilities
+# Create a cross-tabulation with outcome included
+cross_tab = pd.crosstab(pd.Series(X[:, feature_names.index('Age')]),
+                        pd.Series(y))
+
+# Calculate conditional probabilities
+conditional_probs = cross_tab.div(cross_tab.sum(axis=1), axis=0)
+
+plt.figure(figsize=(10, 6))
+sns.heatmap(conditional_probs, annot=True, fmt=".2f", cmap="viridis")
+plt.xlabel('Additional Care')
+plt.ylabel('Age')
+plt.title('Conditional Probabilities of Additional Care Given Age')
+plt.show()
+"""
+
+#Income Tables
+"""
+# Create a cross-tabulation (contingency table)
+cross_tab = pd.crosstab(pd.Series(X[:, feature_names.index('Income')]),
+                        pd.Series(y))
+
+plt.figure(figsize=(10, 6))
+sns.heatmap(cross_tab, annot=True, fmt="d", cmap="viridis")
+plt.xlabel('Outcome')
+plt.ylabel('Income')
+plt.title('Heatmap of Income vs. Outcome')
+plt.show()
+
+#Conditional Probabilities
+# Create a cross-tabulation with outcome included
+cross_tab = pd.crosstab(pd.Series(X[:, feature_names.index('Income')]),
+                        pd.Series(y))
+
+# Calculate conditional probabilities
+conditional_probs = cross_tab.div(cross_tab.sum(axis=1), axis=0)
+
+plt.figure(figsize=(10, 6))
+sns.heatmap(conditional_probs, annot=True, fmt=".2f", cmap="viridis")
+plt.xlabel('Additional Care')
+plt.ylabel('Income')
+plt.title('Conditional Probabilities of Additional Care Given Income')
+plt.show()
+"""
+
+#ZipCode Analysis
+"""
+# Create a cross-tabulation (contingency table)
+cross_tab = pd.crosstab(pd.Series(X[:, feature_names.index('ZipCode')]),
+                        pd.Series(y))
+
+plt.figure(figsize=(10, 6))
+sns.heatmap(cross_tab, annot=True, fmt="d", cmap="viridis")
+plt.xlabel('Outcome')
+plt.ylabel('Zip-Code')
+plt.title('Heatmap of Income vs. Outcome')
+plt.show()
+
+#Conditional Probabilities
+# Create a cross-tabulation with outcome included
+cross_tab = pd.crosstab(pd.Series(X[:, feature_names.index('ZipCode')]),
+                        pd.Series(y))
+
+# Calculate conditional probabilities
+conditional_probs = cross_tab.div(cross_tab.sum(axis=1), axis=0)
+
+plt.figure(figsize=(10, 6))
+sns.heatmap(conditional_probs, annot=True, fmt=".2f", cmap="viridis")
+plt.xlabel('Additional Care')
+plt.ylabel('Zip_Code')
+plt.title('Conditional Probabilities of Additional Care Given Zip-Code Median Income')
+plt.show()
+
+"""
+"""
+
+# Get input data from user
+gender = input("Enter gender (Male/Female): ")
+diagnosis = input("Enter Diagnsis by type: ")
+zipCode = input("Enter zipcode: ")
+race = input("Enter race: ")
+assistanceAsk = input("Enter type of assistance needed: ")
+
+# Format the input data
+input_data = [[gender, diagnosis, zipCode, race, assistanceAsk]]
+
+# --- Encode the input data using the same LabelEncoders ---
+input_data_encoded = []
+for i, value in enumerate(input_data[0]):  # Assuming input_data is a list of lists
+    # Use the corresponding LabelEncoder to transform the value
+    encoded_value = label_encoders[i].transform([value])[0]  # Transform and get the encoded value
+    input_data_encoded.append(encoded_value)
+
+# --- Use the encoded input data for prediction ---
+inputPrediction = clf.predict([input_data_encoded])  # Pass as a list of lists
+
+print("Prediction:", inputPrediction[0])
+clear_output()
+if inputPrediction == 0:
+  print("Does not qualify for additional aid")
+  #print("Confidence: ", clf.predict_proba([input_data_encoded])[0][0])
+else:
+  print("Qualifies for additional aid")
+  #print("Confidence: ", clf.predict_proba([input_data_encoded])[0][1])
+"""
+
+print()
+print("Entire test predictions:")
+#prediction of needing care or not as well as the actual
+prediction = clf.predict(X_test)
+print("Prediction: ", prediction)
+print("Actual: ", y_test)
+
+#Show Accuracy
+accuracy = accuracy_score(y_test, prediction)
+print(f"Accuracy: {accuracy * 100:.2f}%")
